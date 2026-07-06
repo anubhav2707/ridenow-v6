@@ -17,6 +17,11 @@ until docker compose exec -T db pg_isready -U ridenow >/dev/null 2>&1; do
 done
 
 docker compose exec -T db psql -U ridenow -d ridenow -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# Create the schema (rides table, etc.) before seeding. The `down -v` above wipes
+# the volume, so the fresh database has no tables; Drizzle's db.insert() never
+# issues DDL, so without this the seed fails with: relation "rides" does not exist.
+npm run db:push --workspace apps/api
 npm run seed --workspace apps/api
 
 echo "Database reset and seeded."
