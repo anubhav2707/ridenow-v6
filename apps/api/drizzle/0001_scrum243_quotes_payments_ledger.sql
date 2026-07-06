@@ -60,6 +60,7 @@ CREATE TABLE "ledger_entries" (
 	"account" text NOT NULL,
 	"direction" text NOT NULL,
 	"amount_cents" integer NOT NULL,
+	"currency" text DEFAULT 'usd' NOT NULL,
 	"entry_group_id" uuid NOT NULL,
 	"kind" text NOT NULL,
 	"memo" text DEFAULT '' NOT NULL,
