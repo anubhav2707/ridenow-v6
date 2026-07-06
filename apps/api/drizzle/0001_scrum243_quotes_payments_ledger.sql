@@ -80,16 +80,16 @@ CREATE TABLE "payouts" (
 	CONSTRAINT "payouts_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "drivers"("id") ON DELETE restrict ON UPDATE no action
 );
 --> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "quote_id" uuid;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "driver_id" uuid;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "region" text DEFAULT 'geo-1' NOT NULL;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "fare_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'usd' NOT NULL;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "payment_intent_id" text;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "authorized_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "accepted_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "completed_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "cancelled_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "quote_id" uuid;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "driver_id" uuid;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "region" text DEFAULT 'geo-1' NOT NULL;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "fare_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "currency" text DEFAULT 'usd' NOT NULL;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "payment_intent_id" text;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "authorized_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "accepted_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "completed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN "cancelled_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "rides" ADD CONSTRAINT "rides_quote_id_quotes_id_fk" FOREIGN KEY ("quote_id") REFERENCES "quotes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rides" ADD CONSTRAINT "rides_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "drivers"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "ledger_entries_driver_created_idx" ON "ledger_entries" ("driver_id","created_at");--> statement-breakpoint
