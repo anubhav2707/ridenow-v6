@@ -50,13 +50,13 @@ curl -fsS http://localhost:3000/health
 ## Watch the core loop
 
 ```bash
-./scripts/demo.sh        # polls the API health endpoint until it returns 200
+bash ./scripts/demo.sh   # polls the API health endpoint until it returns 200
 ```
 
 ## Seed / reset the database
 
 ```bash
-./scripts/reset.sh       # drop the volume, recreate Postgres+PostGIS, seed demo data
+bash ./scripts/reset.sh  # drop the volume, recreate Postgres+PostGIS, seed demo data
 ```
 
 ## Quality checks (exactly what CI runs)
