@@ -6,7 +6,13 @@ docker compose down -v
 docker compose up -d db
 
 echo "Waiting for Postgres to accept connections ..."
+attempt=0
 until docker compose exec -T db pg_isready -U ridenow >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 30 ]; then
+    echo "Error: Postgres did not become ready after 30 attempts; aborting." >&2
+    exit 1
+  fi
   sleep 1
 done
 
