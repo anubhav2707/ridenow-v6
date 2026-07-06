@@ -11,9 +11,15 @@ import { AppModule } from '../app.module';
 // serialization regressions a direct call would miss.
 const UNKNOWN = '00000000-0000-0000-0000-000000000000';
 
+// NestJS serialises a `NotFoundException('<resource> not found')` (a string arg)
+// as { statusCode, message: '<resource> not found', error: 'Not Found' } — the
+// `error` field IS present because the argument is a string (see
+// HttpException.createBody). `message` carries the specific resource string, so
+// the stable "not found" assertion belongs on `error`, not `message`.
 interface ErrorBody {
   statusCode?: number;
   error?: string;
+  message?: string;
 }
 
 interface Res {
@@ -66,6 +72,8 @@ describe('unknown resource ids fail closed with 404 (HTTP)', () => {
     expect(res.status).toBe(404);
     expect(res.body.statusCode).toBe(404);
     expect(res.body.error).toBe('Not Found');
+    // The specific message is preserved alongside the stable `error` label.
+    expect(typeof res.body.message).toBe('string');
   }
 
   it('GET /quotes/:id returns 404 for an unknown quote', async () => {
