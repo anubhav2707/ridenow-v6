@@ -21,7 +21,7 @@ docker compose exec -T db psql -U ridenow -d ridenow -c "CREATE EXTENSION IF NOT
 # Create the schema (rides table, etc.) before seeding. The `down -v` above wipes
 # the volume, so the fresh database has no tables; Drizzle's db.insert() never
 # issues DDL, so without this the seed fails with: relation "rides" does not exist.
-npm run db:push --workspace apps/api
+npm exec --workspace apps/api -- drizzle-kit push
 npm run seed --workspace apps/api
 
 echo "Database reset and seeded."
