@@ -15,19 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    environment:
-      PORT: 3000
-      DATABASE_URL: postgres://ridenow:ridenow@db:5432/ridenow
-    ports:
-      - "3000:3000"
-    depends_on:
-      db:
-        condition: service_healthy
-
   rider-web:
     build:
       context: .
@@ -36,19 +23,6 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:3000
     ports:
       - "3001:3001"
-    depends_on:
-      - api
-
-  driver-web:
-    build:
-      context: .
-      dockerfile: apps/driver-web/Dockerfile
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3000
-    ports:
-      - "3002:3002"
-    depends_on:
-      - api
 
 volumes:
   db-data:
