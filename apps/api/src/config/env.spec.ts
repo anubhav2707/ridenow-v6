@@ -24,10 +24,10 @@ describe('loadEnv', () => {
   it('accepts a real-looking Stripe key', () => {
     const env = loadEnv({
       PAYMENTS_DRIVER: 'stripe',
-      STRIPE_SECRET_KEY: 'sk_live_realvalue123',
+      STRIPE_SECRET_KEY: 'sk_test_realvalue123',
     });
     expect(env.paymentsDriver).toBe('stripe');
-    expect(env.stripeSecretKey).toBe('sk_live_realvalue123');
+    expect(env.stripeSecretKey).toBe('sk_test_realvalue123');
   });
 
   it('rejects invalid integer and enum values', () => {
