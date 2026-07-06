@@ -1,0 +1,28 @@
+name: e2e
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stack-up:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the core stack
+        run: docker compose up -d --build db api
+      - name: Wait for API health
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/health; then
+              echo ""
+              echo "API healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "API did not become healthy" >&2
+          docker compose logs api
+          exit 1
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
