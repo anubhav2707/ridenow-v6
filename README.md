@@ -13,7 +13,6 @@ apps/
   api/          NestJS backend — health endpoint + Drizzle DB layer   (:3000)
   rider-web/    Next.js rider app                                     (:3001)
   driver-web/   Next.js driver app                                    (:3002)
-scripts/        seed / reset / demo helpers
 docker-compose.yml
 ```
 
@@ -50,13 +49,15 @@ curl -fsS http://localhost:3000/health
 ## Watch the core loop
 
 ```bash
-bash ./scripts/demo.sh   # polls the API health endpoint until it returns 200
+# polls the API health endpoint until it returns 200
+until curl -fsS http://localhost:3000/health; do sleep 1; done
 ```
 
-## Seed / reset the database
+## Reset the database
 
 ```bash
-bash ./scripts/reset.sh  # drop the volume, recreate Postgres+PostGIS, seed demo data
+# drop the volume, then recreate Postgres+PostGIS from docker-compose.yml
+docker compose down -v && docker compose up --build
 ```
 
 ## Quality checks (exactly what CI runs)
