@@ -12,6 +12,7 @@
     "test": "jest",
     "seed": "ts-node src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
     "db:migrate": "ts-node src/db/migrate.ts"
   },
   "dependencies": {
