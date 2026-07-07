@@ -58,11 +58,24 @@ export interface AuthRepository {
 
   // --- otp codes ---
   insertOtp(otp: OtpCodeRow): Promise<void>;
-  /** Latest not-yet-consumed code for a phone (may be expired — caller checks). */
+  /**
+   * Latest not-yet-consumed code for a phone (may be expired — caller checks).
+   * NOTE: its `attempts` counter is per-row, so it must NOT be used as the
+   * lockout signal — a fresh POST /auth/otp/request mints an `attempts=0` row
+   * that shadows a locked one and resets the lockout. Gate lockout on
+   * `countRecentFailedOtpAttempts` (identity-level) instead.
+   */
   getActiveOtp(phone: string): Promise<OtpCodeRow | null>;
   updateOtp(id: string, patch: Partial<OtpCodeRow>): Promise<OtpCodeRow>;
   /** How many codes were sent to this phone at/after `since` (send-rate limit). */
   countOtpSends(phone: string, since: Date): Promise<number>;
+  /**
+   * Sum of failed verify attempts across ALL codes for this phone at/after
+   * `since`. Lockout is an identity-level control, so callers gate on this
+   * total rather than a single row's `attempts` — requesting a new code can no
+   * longer reset the lockout window.
+   */
+  countRecentFailedOtpAttempts(phone: string, since: Date): Promise<number>;
 
   // --- sessions ---
   insertSession(session: SessionRow): Promise<void>;
