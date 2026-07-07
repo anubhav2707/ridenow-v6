@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import {
   api,
   formatMoney,
@@ -264,7 +264,7 @@ function Steps({ current }: { current: Step }) {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   main: {
     fontFamily: 'system-ui, sans-serif',
     maxWidth: 460,
