@@ -1,15 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
 
-export type SmsChannel = 'sms' | 'console';
+export type SmsChannel = 'sms' | 'console' | 'failed';
 
 /**
  * Sends the one-time login code over SMS. When the Twilio env keys are set it
  * POSTs to the Twilio Messaging API over HTTPS (raw fetch, no twilio SDK —
  * mirroring how StripePaymentGateway talks to Stripe). When they are unset (dev/
  * CI) the code is logged to the API console instead, so the passwordless flow is
- * fully exercisable without a Twilio account. A Twilio failure never fails the
- * request: the code is already stored, and we fall back to logging.
+ * fully exercisable without a Twilio account. A Twilio failure never throws: the
+ * code is already stored, so we return the 'failed' channel (not 'console') and
+ * let the caller tell the rider delivery failed and offer a retry. We never log
+ * the raw code in production.
  */
 @Injectable()
 export class SmsService {
@@ -48,12 +50,12 @@ export class SmsService {
       if (!res.ok) {
         const detail = await res.text();
         this.logger.error(`Twilio send failed (${res.status}): ${detail}`);
-        return 'console';
+        return 'failed';
       }
       return 'sms';
     } catch (err) {
       this.logger.error(`Twilio send threw: ${(err as Error).message}`);
-      return 'console';
+      return 'failed';
     }
   }
 }
