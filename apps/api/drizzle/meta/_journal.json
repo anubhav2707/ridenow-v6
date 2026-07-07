@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1710000000000,
+      "tag": "0000_init_rides",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1710000001000,
+      "tag": "0001_scrum243_quotes_payments_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1710000002000,
+      "tag": "0002_scrum241_driver_flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1710000003000,
+      "tag": "0003_scrum240_auth_payment_methods",
+      "breakpoints": true
+    }
+  ]
+}
