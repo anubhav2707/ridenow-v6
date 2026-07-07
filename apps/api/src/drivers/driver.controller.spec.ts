@@ -56,7 +56,7 @@ describe('DriverController', () => {
       vehicleMake: 'Toyota',
       vehicleModel: 'Prius',
       vehiclePlate: 'ABC-1234',
-      plan: 'flat-monthly',
+      plan: 'flat_monthly',
     } as unknown as OnboardDriverInput;
 
     // Happy path: the new endpoint delegates to onboard() and returns its view.
@@ -65,7 +65,7 @@ describe('DriverController', () => {
         id: 'drv_1',
         displayName: 'Asha Rao',
         active: true,
-        plan: 'flat-monthly',
+        plan: 'flat_monthly',
       } as unknown as DriverView;
       drivers.onboard.mockResolvedValue(view);
 
