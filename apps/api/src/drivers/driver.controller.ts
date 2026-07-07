@@ -39,7 +39,8 @@ export class DriverController {
     return this.drivers.getView(id);
   }
 
-  // Per-trip earnings ledger: full take-home + the explicit $0 commission line.
+  // Per-trip earnings ledger: full take-home with a $0 per-trip deduction and
+  // no commission line.
   @Get(':id/rides/:rideId/earnings')
   tripEarnings(
     @Param('rideId') rideId: string,
