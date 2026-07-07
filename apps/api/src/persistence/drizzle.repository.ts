@@ -1,7 +1,9 @@
-import { and, eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { db as defaultDb } from '../db/client';
 import {
   drivers,
+  gpsPings,
   ledgerEntries,
   payments,
   quoteComponents,
@@ -15,6 +17,7 @@ import type {
 } from '../ledger/ledger.types';
 import {
   type DriverRow,
+  type GpsPingRow,
   type PaymentRow,
   type PaymentStatus,
   type QuoteComponentRow,
@@ -105,6 +108,88 @@ export class DrizzleRideRepository implements RideRepository {
       .where(eq(rides.id, id))
       .returning();
     return mapRide(row);
+  }
+
+  async acceptOffer(input: {
+    rideId: string;
+    driverId: string;
+    now: Date;
+    otpCode: string;
+    otpExpiresAt: Date;
+  }): Promise<RideRow | null> {
+    // Single atomic compare-and-set: only the row still in 'offered', driverless
+    // and unexpired is updated + RETURNed. Concurrent accepts serialize on the
+    // row lock, so the second sees status='accepted' and matches nothing.
+    const [row] = await this.db
+      .update(rides)
+      .set({
+        driverId: input.driverId,
+        status: 'accepted',
+        acceptedAt: input.now,
+        otpCode: input.otpCode,
+        otpExpiresAt: input.otpExpiresAt,
+        otpAttempts: 0,
+        otpConsumedAt: null,
+      })
+      .where(
+        and(
+          eq(rides.id, input.rideId),
+          eq(rides.status, 'offered'),
+          isNull(rides.driverId),
+          or(
+            isNull(rides.offerExpiresAt),
+            gt(rides.offerExpiresAt, input.now),
+          ),
+        ),
+      )
+      .returning();
+    return row ? mapRide(row) : null;
+  }
+
+  async recordPing(input: {
+    rideId: string;
+    lat: number;
+    lng: number;
+    recordedAt: Date;
+    receivedAt: Date;
+  }): Promise<GpsPingRow> {
+    return this.db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ seq: gpsPings.seq })
+        .from(gpsPings)
+        .where(eq(gpsPings.rideId, input.rideId));
+      const seq =
+        existing.reduce((max, r) => Math.max(max, r.seq), 0) + 1;
+      const [inserted] = await tx
+        .insert(gpsPings)
+        .values({
+          id: randomUUID(),
+          rideId: input.rideId,
+          lat: input.lat,
+          lng: input.lng,
+          recordedAt: input.recordedAt,
+          receivedAt: input.receivedAt,
+          seq,
+        })
+        .returning();
+      await tx
+        .update(rides)
+        .set({
+          lastLat: input.lat,
+          lastLng: input.lng,
+          lastPingAt: input.recordedAt,
+        })
+        .where(eq(rides.id, input.rideId));
+      return mapGpsPing(inserted);
+    });
+  }
+
+  async pingsForRide(rideId: string): Promise<GpsPingRow[]> {
+    const rows = await this.db
+      .select()
+      .from(gpsPings)
+      .where(eq(gpsPings.rideId, rideId));
+    return rows.map(mapGpsPing).sort((a, b) => a.seq - b.seq);
   }
 
   async persistAuthorization(input: {
@@ -254,4 +339,8 @@ function mapLedgerEntry(row: Row): LedgerEntryRow {
     ...(row as LedgerEntryRow),
     direction: row.direction as LedgerDirection,
   };
+}
+
+function mapGpsPing(row: Row): GpsPingRow {
+  return row as GpsPingRow;
 }

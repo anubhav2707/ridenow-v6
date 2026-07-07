@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { LedgerEntryRow, LedgerPosting } from '../ledger/ledger.types';
 import {
   type DriverRow,
+  type GpsPingRow,
   type PaymentRow,
   type QuoteComponentRow,
   type QuoteRow,
@@ -21,6 +22,7 @@ export class InMemoryRideRepository implements RideRepository {
   private readonly drivers = new Map<string, DriverRow>();
   private readonly rides = new Map<string, RideRow>();
   private readonly payments = new Map<string, PaymentRow>();
+  private readonly pings: GpsPingRow[] = [];
   private readonly ledger: LedgerEntryRow[] = [];
   private ledgerClock = 0;
 
@@ -77,6 +79,81 @@ export class InMemoryRideRepository implements RideRepository {
     const next = { ...ride, ...patch };
     this.rides.set(id, next);
     return { ...next };
+  }
+
+  async acceptOffer(input: {
+    rideId: string;
+    driverId: string;
+    now: Date;
+    otpCode: string;
+    otpExpiresAt: Date;
+  }): Promise<RideRow | null> {
+    // Compare-and-set mirroring the Drizzle conditional update: only claim a ride
+    // still 'offered', driverless and unexpired, so concurrent accepts can't both win.
+    const ride = this.rides.get(input.rideId);
+    if (
+      !ride ||
+      ride.status !== 'offered' ||
+      ride.driverId !== null ||
+      (ride.offerExpiresAt !== null &&
+        ride.offerExpiresAt.getTime() <= input.now.getTime())
+    ) {
+      return null;
+    }
+    const next: RideRow = {
+      ...ride,
+      driverId: input.driverId,
+      status: 'accepted',
+      acceptedAt: input.now,
+      otpCode: input.otpCode,
+      otpExpiresAt: input.otpExpiresAt,
+      otpAttempts: 0,
+      otpConsumedAt: null,
+    };
+    this.rides.set(input.rideId, next);
+    return { ...next };
+  }
+
+  async recordPing(input: {
+    rideId: string;
+    lat: number;
+    lng: number;
+    recordedAt: Date;
+    receivedAt: Date;
+  }): Promise<GpsPingRow> {
+    // Server assigns the per-ride seq (max seen + 1), then refreshes the ride's
+    // hot last-position — the same all-or-nothing step the Drizzle tx makes.
+    const seq =
+      this.pings
+        .filter((p) => p.rideId === input.rideId)
+        .reduce((max, p) => Math.max(max, p.seq), 0) + 1;
+    const ping: GpsPingRow = {
+      id: randomUUID(),
+      rideId: input.rideId,
+      lat: input.lat,
+      lng: input.lng,
+      recordedAt: input.recordedAt,
+      receivedAt: input.receivedAt,
+      seq,
+    };
+    this.pings.push({ ...ping });
+    const ride = this.rides.get(input.rideId);
+    if (ride) {
+      this.rides.set(input.rideId, {
+        ...ride,
+        lastLat: input.lat,
+        lastLng: input.lng,
+        lastPingAt: input.recordedAt,
+      });
+    }
+    return { ...ping };
+  }
+
+  async pingsForRide(rideId: string): Promise<GpsPingRow[]> {
+    return this.pings
+      .filter((p) => p.rideId === rideId)
+      .sort((a, b) => a.seq - b.seq)
+      .map((p) => ({ ...p }));
   }
 
   async persistAuthorization(input: {

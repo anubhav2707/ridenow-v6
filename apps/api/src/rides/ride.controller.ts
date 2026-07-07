@@ -17,6 +17,10 @@ interface AcceptBody {
   driverId: string;
 }
 
+interface StartBody {
+  otp: string;
+}
+
 @Controller('rides')
 export class RideController {
   constructor(private readonly rides: RideService) {}
@@ -42,6 +46,15 @@ export class RideController {
     @Body() body: AcceptBody,
   ): Promise<RideView> {
     return this.rides.accept(id, body.driverId);
+  }
+
+  // OTP trip start: driver enters the code the rider read aloud.
+  @Post(':id/start')
+  start(
+    @Param('id') id: string,
+    @Body() body: StartBody,
+  ): Promise<RideView> {
+    return this.rides.startTrip(id, body?.otp);
   }
 
   @Post(':id/complete')

@@ -3,6 +3,7 @@ import type { Env } from '../config/env';
 import { DriverService } from '../drivers/driver.service';
 import { EarningsService } from '../earnings/earnings.service';
 import { FareService } from '../fares/fare.service';
+import { GpsService } from '../gps/gps.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { FakePaymentGateway } from '../payments/fake-payment-gateway';
 import { InMemoryRideRepository } from '../persistence/in-memory.repository';
@@ -48,6 +49,7 @@ export function makeHarness(opts: { gateway?: FakePaymentGateway } = {}) {
   const quotes = new QuoteService(repo, clock, env, routing, fares);
   const rides = new RideService(repo, gateway, clock, env, ledger, earnings);
   const drivers = new DriverService(repo, clock, env);
+  const gps = new GpsService(repo, clock);
   return {
     env,
     clock,
@@ -60,6 +62,7 @@ export function makeHarness(opts: { gateway?: FakePaymentGateway } = {}) {
     quotes,
     rides,
     drivers,
+    gps,
   };
 }
 
@@ -72,6 +75,37 @@ export async function registerDemoDriver(h: Harness, phone = '+15550109999') {
     displayName: 'Demo Driver',
     region: 'geo-1',
   });
+}
+
+/** Onboards a demo driver via the SCRUM-241 lightweight onboarding flow. */
+export async function onboardDemoDriver(h: Harness, phone = '+15550108888') {
+  return h.drivers.onboard({
+    name: 'Demo Driver',
+    phone,
+    vehicleMake: 'Toyota',
+    vehicleModel: 'Prius',
+    vehiclePlate: 'RIDE-241',
+    plan: 'flat_monthly',
+  });
+}
+
+/** Quotes + confirms a ride, leaving it in 'offered' state, and returns the ride id + fare. */
+export async function offerRide(
+  h: Harness,
+  riderPhone = DEMO_ROUTE.riderPhone,
+): Promise<{ quoteId: string; rideId: string; fareCents: number }> {
+  const quote = await h.quotes.createQuote({
+    riderPhone,
+    region: DEMO_ROUTE.region,
+    pickup: DEMO_ROUTE.pickup,
+    dropoff: DEMO_ROUTE.dropoff,
+  });
+  const confirmed = await h.rides.confirm({ quoteId: quote.id, riderPhone });
+  return {
+    quoteId: quote.id,
+    rideId: confirmed.ride.id,
+    fareCents: confirmed.ride.fareCents,
+  };
 }
 
 /** Runs a full quote -> confirm -> accept -> complete ride and returns the ids. */

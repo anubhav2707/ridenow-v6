@@ -42,13 +42,24 @@ export interface DriverRow {
   displayName: string;
   region: string;
   subscriptionStatus: string;
+  // SCRUM-241 onboarding fields.
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehiclePlate: string | null;
+  plan: string | null;
+  subscriptionFeeCents: Cents;
+  active: boolean;
   createdAt: Date;
 }
 
+// Full driver-facing lifecycle. `offered` is the claimable state a ride enters
+// once the rider has paid/locked the fare (the payment row separately tracks its
+// own 'authorized' status); `in_progress` is entered after OTP trip-start.
 export type RideStatus =
   | 'quoted'
-  | 'authorized'
+  | 'offered'
   | 'accepted'
+  | 'in_progress'
   | 'completed'
   | 'cancelled';
 
@@ -62,11 +73,33 @@ export interface RideRow {
   fareCents: Cents;
   currency: string;
   paymentIntentId: string | null;
+  pickupLabel: string | null;
+  pickupLat: number | null;
+  pickupLng: number | null;
+  offerExpiresAt: Date | null;
+  otpCode: string | null;
+  otpExpiresAt: Date | null;
+  otpAttempts: number;
+  otpConsumedAt: Date | null;
   authorizedAt: Date | null;
   acceptedAt: Date | null;
+  startedAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
+  lastLat: number | null;
+  lastLng: number | null;
+  lastPingAt: Date | null;
   createdAt: Date;
+}
+
+export interface GpsPingRow {
+  id: string;
+  rideId: string;
+  lat: number;
+  lng: number;
+  recordedAt: Date;
+  receivedAt: Date;
+  seq: number;
 }
 
 export type PaymentStatus = 'authorized' | 'captured' | 'voided';
@@ -103,8 +136,32 @@ export interface RideRepository {
 
   // --- rides ---
   getRide(id: string): Promise<RideRow | null>;
-  /** Non-money update (e.g. driver accepts). */
+  /** Non-money update (e.g. OTP attempt increment, trip start). */
   updateRide(id: string, patch: Partial<RideRow>): Promise<RideRow>;
+  /**
+   * Atomically claim an OFFERED, unexpired, driverless ride for a driver in ONE
+   * conditional update (compare-and-set). Returns the updated ride when this
+   * caller won the race, or null when the row was not in a claimable state
+   * (already accepted, expired, or gone) — so concurrent accepts cannot both win.
+   */
+  acceptOffer(input: {
+    rideId: string;
+    driverId: string;
+    now: Date;
+    otpCode: string;
+    otpExpiresAt: Date;
+  }): Promise<RideRow | null>;
+
+  // --- gps pings (in-progress trip; off the money path) ---
+  /** Append a ping (server assigns the per-ride seq) and refresh the ride's hot last-position. */
+  recordPing(input: {
+    rideId: string;
+    lat: number;
+    lng: number;
+    recordedAt: Date;
+    receivedAt: Date;
+  }): Promise<GpsPingRow>;
+  pingsForRide(rideId: string): Promise<GpsPingRow[]>;
 
   // --- atomic money operations ---
   /** Insert ride + payment + authorization postings and consume the quote, atomically. */

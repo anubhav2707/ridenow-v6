@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { getPlan } from '../common/plan-catalog';
 import { ENV, type Env } from '../config/env';
 import { LedgerService } from '../ledger/ledger.service';
 import { KINDS, type LedgerEntryRow } from '../ledger/ledger.types';
@@ -6,6 +7,7 @@ import { formatUsd } from '../money/money';
 import {
   RIDE_REPOSITORY,
   type RideRepository,
+  type RideStatus,
 } from '../persistence/repository';
 
 export interface TripEarningsLine {
@@ -28,6 +30,41 @@ export interface TripEarningsView {
   balanced: boolean;
   lines: TripEarningsLine[];
   postings: LedgerEntryRow[];
+}
+
+export interface TakeHomeLedgerLine {
+  label: string;
+  amountCents: number;
+  kind: string;
+}
+
+/**
+ * The SCRUM-241 driver take-home ledger screen for a single trip. It shows the
+ * locked upfront fare, the flat subscription fee as the ONLY (per-trip $0)
+ * deduction line, and a "You Keep" total equal to 100% of the fare. There is NO
+ * percentage-commission line anywhere in this view.
+ */
+export interface TakeHomeLedgerView {
+  rideId: string;
+  driverId: string | null;
+  currency: string;
+  status: RideStatus;
+  /** True once the rider's payment has been captured. */
+  paid: boolean;
+  /** (1) The locked upfront fare the rider paid, in integer minor units. */
+  upfrontFareCents: number;
+  upfrontFareDisplay: string;
+  plan: string | null;
+  /** The flat monthly subscription fee — context/header, billed monthly, not per trip. */
+  subscriptionFeeCents: number;
+  subscriptionFeeDisplay: string;
+  /** The only per-trip deduction: $0. */
+  perTripDeductionCents: number;
+  /** (2) Itemized lines: upfront fare + the flat subscription-fee line. */
+  lines: TakeHomeLedgerLine[];
+  /** (3) You Keep = 100% of the upfront fare, derived from the immutable ledger. */
+  youKeepCents: number;
+  youKeepDisplay: string;
 }
 
 export interface DriverEarningsSummary {
@@ -100,6 +137,75 @@ export class EarningsService {
       balanced: this.ledger.isBalanced(postings),
       lines,
       postings,
+    };
+  }
+
+  /**
+   * The per-trip take-home ledger (SCRUM-241). Take-home ("You Keep") is DERIVED
+   * from the append-only double-entry ledger — the same immutable locked-fare
+   * snapshot the rider paid — so it is cent-exact and cannot drift. The flat
+   * subscription fee is surfaced as a monthly context line with a $0 per-trip
+   * deduction, so You Keep === 100% of the fare and no commission line appears.
+   */
+  async tripTakeHomeLedger(rideId: string): Promise<TakeHomeLedgerView> {
+    const ride = await this.repo.getRide(rideId);
+    if (!ride) throw new NotFoundException(`ride ${rideId} not found`);
+    const payment = await this.repo.getPaymentByRide(rideId);
+    const postings = await this.repo.ledgerForRide(rideId);
+
+    // Prefer the ledger-derived take-home (the money that actually moved). Before
+    // capture there are no earnings postings yet, so fall back to the locked fare.
+    const derivedTakeHome = ride.driverId
+      ? LedgerService.driverTakeHomeCents(postings, ride.driverId)
+      : 0;
+    const paid = payment?.status === 'captured';
+    const youKeepCents = paid ? derivedTakeHome : ride.fareCents;
+    const upfrontFareCents = ride.fareCents;
+
+    // Subscription fee comes from the driver's chosen plan (flat, monthly).
+    let plan: string | null = null;
+    let subscriptionFeeCents = 0;
+    if (ride.driverId) {
+      const driver = await this.repo.getDriver(ride.driverId);
+      if (driver) {
+        plan = driver.plan;
+        subscriptionFeeCents =
+          driver.subscriptionFeeCents ||
+          (driver.plan ? getPlan(driver.plan)?.subscriptionFeeCents ?? 0 : 0);
+      }
+    }
+
+    const planLabel = plan ? getPlan(plan)?.label ?? plan : 'subscription';
+    const lines: TakeHomeLedgerLine[] = [
+      {
+        label: 'Upfront fare (rider paid)',
+        amountCents: upfrontFareCents,
+        kind: 'fare',
+      },
+      {
+        // The ONLY deduction line. The flat fee is billed monthly, so the
+        // per-trip deduction is $0 — which is exactly why You Keep is 100%.
+        label: `Subscription fee (${planLabel}) — billed monthly, $0 per trip`,
+        amountCents: 0,
+        kind: 'subscription_fee',
+      },
+    ];
+
+    return {
+      rideId,
+      driverId: ride.driverId,
+      currency: ride.currency,
+      status: ride.status,
+      paid,
+      upfrontFareCents,
+      upfrontFareDisplay: formatUsd(upfrontFareCents),
+      plan,
+      subscriptionFeeCents,
+      subscriptionFeeDisplay: formatUsd(subscriptionFeeCents),
+      perTripDeductionCents: 0,
+      lines,
+      youKeepCents,
+      youKeepDisplay: formatUsd(youKeepCents),
     };
   }
 
