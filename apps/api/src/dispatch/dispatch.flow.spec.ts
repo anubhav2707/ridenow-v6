@@ -152,8 +152,10 @@ describe('dispatch-lite matching', () => {
   it('closes the request -> notified -> accepted -> started loop within the 10-minute budget with fixed pricing', async () => {
     const h = makeHarness();
     const driver = await registerLocatedDriver(h, { phone: '+15550109001' });
-    const { rideId, fareCents } = await offerRide(h, RIDER);
+    // Anchor the budget at request submission so the quote+offer latency is
+    // inside the measured request->started window the AC claims.
     const requestedAt = h.clock.now();
+    const { rideId, fareCents } = await offerRide(h, RIDER);
 
     // Semi-automated dispatch, each step a couple minutes apart.
     h.clock.advanceSeconds(120);
