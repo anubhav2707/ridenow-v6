@@ -70,6 +70,9 @@ export class DispatchController {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       throw new BadRequestException('lat and lng must be finite numbers');
     }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw new BadRequestException('lat must be in [-90,90] and lng in [-180,180]');
+    }
     return this.dispatch.updateDriverLocation(id, lat, lng);
   }
 
