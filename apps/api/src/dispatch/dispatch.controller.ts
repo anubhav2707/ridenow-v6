@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { DispatchService } from './dispatch.service';
 import { RepeatLiquidityService } from './repeat-liquidity.service';
 import type {
@@ -58,7 +66,11 @@ export class DispatchController {
     @Param('id') id: string,
     @Body() body: LocationBody,
   ): Promise<{ driverId: string; lat: number; lng: number; at: string }> {
-    return this.dispatch.updateDriverLocation(id, body?.lat, body?.lng);
+    const { lat, lng } = body ?? ({} as LocationBody);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequestException('lat and lng must be finite numbers');
+    }
+    return this.dispatch.updateDriverLocation(id, lat, lng);
   }
 
   @Get('repeat-liquidity')
