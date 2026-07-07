@@ -10,6 +10,15 @@ export interface AuthorizeInput {
   amountCents: Cents;
   currency: string;
   idempotencyKey: string;
+  /**
+   * The rider's saved (tokenized) Stripe payment method, when one exists. Passing
+   * it lets Stripe authorize off-session against the saved card with no card
+   * re-entry. Undefined for the legacy flow (no saved card) — the fake gateway
+   * ignores it and Stripe would require a card at confirmation time.
+   */
+  paymentMethodId?: string;
+  /** The rider's Stripe customer id, paired with paymentMethodId. */
+  customerId?: string;
 }
 
 export interface AuthorizeResult {

@@ -1,3 +1,7 @@
+import { AuthService } from '../auth/auth.service';
+import { InMemoryAuthRepository } from '../auth/in-memory.auth.repository';
+import { SmsService } from '../auth/sms.service';
+import { TokenService } from '../auth/token.service';
 import { FakeClock } from '../clock/clock';
 import type { Env } from '../config/env';
 import { DriverService } from '../drivers/driver.service';
@@ -6,6 +10,7 @@ import { FareService } from '../fares/fare.service';
 import { GpsService } from '../gps/gps.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { FakePaymentGateway } from '../payments/fake-payment-gateway';
+import { PaymentMethodService } from '../payments/payment-method.service';
 import { InMemoryRideRepository } from '../persistence/in-memory.repository';
 import { QuoteService } from '../quotes/quote.service';
 import { RideService } from '../rides/ride.service';
@@ -13,9 +18,11 @@ import { HaversineRouting } from '../routing/routing';
 
 export const TEST_ENV: Env = {
   activeRegion: 'geo-1',
+  appEnv: 'test',
   paymentsDriver: 'fake',
   store: 'memory',
-  quoteTtlSeconds: 120,
+  // 10-minute locked-quote window (SCRUM-240).
+  quoteTtlSeconds: 600,
   currency: 'usd',
   fare: {
     baseCents: 250,
@@ -24,6 +31,17 @@ export const TEST_ENV: Env = {
     bookingFeeCents: 150,
   },
   uberReferenceCommissionBps: 2500,
+  stripeMode: 'test',
+  auth: {
+    jwtSecret: 'test-jwt-secret',
+    accessTtlSeconds: 15 * 60,
+    refreshTtlSeconds: 30 * 24 * 60 * 60,
+    otpTtlSeconds: 300,
+    otpMaxAttempts: 5,
+    otpSendWindowSeconds: 3600,
+    otpSendMax: 5,
+  },
+  twilio: {},
 };
 
 export const DEMO_ROUTE = {
@@ -44,12 +62,25 @@ export function makeHarness(opts: { gateway?: FakePaymentGateway } = {}) {
   const fares = new FareService(env);
   const ledger = new LedgerService();
   const repo = new InMemoryRideRepository();
+  const authRepo = new InMemoryAuthRepository();
   const earnings = new EarningsService(repo, env, ledger);
   const gateway = opts.gateway ?? new FakePaymentGateway();
   const quotes = new QuoteService(repo, clock, env, routing, fares);
-  const rides = new RideService(repo, gateway, clock, env, ledger, earnings);
+  const rides = new RideService(
+    repo,
+    gateway,
+    clock,
+    env,
+    ledger,
+    earnings,
+    authRepo,
+  );
   const drivers = new DriverService(repo, clock, env);
   const gps = new GpsService(repo, clock);
+  const tokens = new TokenService(env, clock);
+  const sms = new SmsService(env);
+  const auth = new AuthService(authRepo, clock, env, tokens, sms);
+  const paymentMethods = new PaymentMethodService(authRepo, clock);
   return {
     env,
     clock,
@@ -57,12 +88,17 @@ export function makeHarness(opts: { gateway?: FakePaymentGateway } = {}) {
     fares,
     ledger,
     repo,
+    authRepo,
     earnings,
     gateway,
     quotes,
     rides,
     drivers,
     gps,
+    tokens,
+    sms,
+    auth,
+    paymentMethods,
   };
 }
 

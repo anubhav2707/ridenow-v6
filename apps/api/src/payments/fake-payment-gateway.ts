@@ -13,6 +13,8 @@ interface FakeIntent {
   amountCents: number;
   currency: string;
   status: 'authorized' | 'captured' | 'voided';
+  /** Echoes the saved payment method used to authorize, for test assertions. */
+  paymentMethodId?: string;
 }
 
 export interface FakeGatewayOptions {
@@ -43,8 +45,14 @@ export class FakePaymentGateway implements PaymentGateway {
       amountCents: input.amountCents,
       currency: input.currency,
       status: 'authorized',
+      paymentMethodId: input.paymentMethodId,
     });
     return { intentId, gateway: 'fake', status: 'authorized' };
+  }
+
+  /** Test-only read of a recorded intent (amount, status, saved card used). */
+  getIntent(intentId: string): Readonly<FakeIntent> | undefined {
+    return this.intents.get(intentId);
   }
 
   async capture(input: CaptureInput): Promise<CaptureResult> {

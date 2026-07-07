@@ -5,6 +5,8 @@ import type { Cents } from '../money/money';
 
 export type PaymentsDriver = 'fake' | 'stripe';
 export type StoreDriver = 'memory' | 'postgres';
+/** Server-side money-safety gate: which Stripe universe we are allowed to touch. */
+export type StripeMode = 'test' | 'live';
 
 export interface FareConfig {
   baseCents: Cents;
@@ -13,9 +15,36 @@ export interface FareConfig {
   bookingFeeCents: Cents;
 }
 
+// Passwordless-auth + anti-toll-fraud knobs. All have safe non-secret defaults so
+// the app boots in dev/CI; JWT_SECRET falls back to a clearly-marked dev value and
+// is rejected only when running in production (see requireProdSecret).
+export interface AuthConfig {
+  jwtSecret: string;
+  /** Short-lived bearer access token lifetime, in seconds (default 15m). */
+  accessTtlSeconds: number;
+  /** Rotating refresh token lifetime, in seconds (default 30d). */
+  refreshTtlSeconds: number;
+  /** How long a one-time SMS code stays valid, in seconds (default 5m). */
+  otpTtlSeconds: number;
+  /** Wrong-code attempts allowed before the pending code locks out. */
+  otpMaxAttempts: number;
+  /** Sliding window for send-rate limiting, in seconds (anti-toll-fraud). */
+  otpSendWindowSeconds: number;
+  /** Max OTP sends allowed to one phone number inside the window. */
+  otpSendMax: number;
+}
+
+export interface TwilioConfig {
+  accountSid?: string;
+  authToken?: string;
+  fromNumber?: string;
+}
+
 export interface Env {
   /** The single feature-flagged geography this MVP serves. */
   activeRegion: string;
+  /** 'production' locks down secret fallbacks; anything else is dev/test. */
+  appEnv: string;
   paymentsDriver: PaymentsDriver;
   store: StoreDriver;
   /** How long a locked quote stays confirmable, in seconds. */
@@ -24,8 +53,18 @@ export interface Env {
   fare: FareConfig;
   /** Display-only reference: the % (in basis points) a legacy platform would skim. */
   uberReferenceCommissionBps: number;
+  /** Server-side-only test/live gate for real money movement. */
+  stripeMode: StripeMode;
+  /**
+   * Explicit, reversible opt-in for real-money (sk_live_) charges — default OFF.
+   * assertStripeMode refuses to boot with a live key unless this is true, so live
+   * mode is a deliberate human decision, not a default. Rollback: unset it.
+   */
+  liveEnabled?: boolean;
   /** Only present/required when paymentsDriver === 'stripe'. */
   stripeSecretKey?: string;
+  auth: AuthConfig;
+  twilio: TwilioConfig;
 }
 
 // Values that must NEVER be accepted as a real secret. Keeping this list explicit
@@ -70,7 +109,13 @@ function readEnum<T extends string>(
   return raw as T;
 }
 
+// A dev-only JWT signing key. Fine for local/CI (deterministic, no secret to
+// leak) but MUST be overridden in production — assertStripeMode-style boot checks
+// and requireProdSecret below make the production requirement explicit.
+const DEV_JWT_SECRET = 'dev-insecure-jwt-secret-change-me';
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const appEnv = source.APP_ENV?.trim() || 'development';
   const paymentsDriver = readEnum<PaymentsDriver>(
     source,
     'PAYMENTS_DRIVER',
@@ -84,6 +129,16 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     'memory',
   );
 
+  const stripeMode = readEnum<StripeMode>(
+    source,
+    'STRIPE_MODE',
+    ['test', 'live'],
+    'test',
+  );
+  // Real-money (sk_live_) charges are opt-in and OFF by default: assertStripeMode
+  // refuses to boot with a live key unless this is explicitly 'true'. Anything
+  // else — unset, 'false', empty — keeps us in safe test/fake territory.
+  const liveEnabled = source.ENABLE_LIVE_PAYMENTS?.trim() === 'true';
   const stripeSecretKey = source.STRIPE_SECRET_KEY?.trim();
   if (paymentsDriver === 'stripe') {
     if (!stripeSecretKey || PLACEHOLDER_SECRETS.has(stripeSecretKey)) {
@@ -95,11 +150,23 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     }
   }
 
+  // JWT secret: a fixed dev fallback keeps CI/local booting, but a real secret is
+  // mandatory in production so tokens can't be forged with a public value.
+  const rawJwtSecret = source.JWT_SECRET?.trim();
+  const jwtSecret =
+    rawJwtSecret && !PLACEHOLDER_SECRETS.has(rawJwtSecret)
+      ? rawJwtSecret
+      : requireProdSecret(appEnv, rawJwtSecret, 'JWT_SECRET', DEV_JWT_SECRET);
+
   return {
     activeRegion: source.ACTIVE_REGION?.trim() || 'geo-1',
+    appEnv,
     paymentsDriver,
     store,
-    quoteTtlSeconds: readInt(source, 'QUOTE_TTL_SECONDS', 120),
+    // The locked upfront quote is honored for 10 minutes before confirmation
+    // (SCRUM-240 AC): long enough for the rider to review, short enough that a
+    // stale route/price can't be confirmed hours later.
+    quoteTtlSeconds: readInt(source, 'QUOTE_TTL_SECONDS', 600),
     currency: source.CURRENCY?.trim() || 'usd',
     fare: {
       baseCents: readInt(source, 'FARE_BASE_CENTS', 250),
@@ -112,8 +179,81 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       'UBER_REFERENCE_COMMISSION_BPS',
       2500,
     ),
+    stripeMode,
+    liveEnabled,
     stripeSecretKey,
+    auth: {
+      jwtSecret,
+      accessTtlSeconds: readInt(source, 'JWT_ACCESS_TTL_SECONDS', 15 * 60),
+      refreshTtlSeconds: readInt(
+        source,
+        'JWT_REFRESH_TTL_SECONDS',
+        30 * 24 * 60 * 60,
+      ),
+      otpTtlSeconds: readInt(source, 'OTP_TTL_SECONDS', 300),
+      otpMaxAttempts: readInt(source, 'OTP_MAX_ATTEMPTS', 5),
+      otpSendWindowSeconds: readInt(source, 'OTP_SEND_WINDOW_SECONDS', 3600),
+      otpSendMax: readInt(source, 'OTP_SEND_MAX', 5),
+    },
+    twilio: {
+      accountSid: source.TWILIO_ACCOUNT_SID?.trim() || undefined,
+      authToken: source.TWILIO_AUTH_TOKEN?.trim() || undefined,
+      fromNumber: source.TWILIO_FROM_NUMBER?.trim() || undefined,
+    },
   };
+}
+
+// In production a missing/placeholder secret is fatal; elsewhere we fall back to a
+// clearly-marked dev value so the app still boots for local work and CI.
+function requireProdSecret(
+  appEnv: string,
+  raw: string | undefined,
+  name: string,
+  devFallback: string,
+): string {
+  if (appEnv === 'production') {
+    throw new Error(
+      `${name} is required in production (got ${raw ? 'a placeholder' : 'nothing'}). ` +
+        'Refusing to start with a forgeable signing key.',
+    );
+  }
+  return devFallback;
+}
+
+/**
+ * Boot-time money-safety gate: when Stripe is the live gateway, the secret key's
+ * own livemode (sk_test_ vs sk_live_) MUST match the server-side STRIPE_MODE flag.
+ * A test key in live mode (or vice-versa) is a misconfiguration that could move —
+ * or fail to move — real money, so we refuse to start. No-op for the fake gateway.
+ */
+export function assertStripeMode(env: Env): void {
+  if (env.paymentsDriver !== 'stripe') return;
+  const key = env.stripeSecretKey ?? '';
+  const keyIsLive = key.startsWith('sk_live_');
+  const keyIsTest = key.startsWith('sk_test_');
+  if (!keyIsLive && !keyIsTest) {
+    throw new Error(
+      `STRIPE_SECRET_KEY has an unrecognized prefix — expected sk_test_ or sk_live_.`,
+    );
+  }
+  // Real-money movement is an explicit, reversible opt-in: a live key only boots
+  // when ENABLE_LIVE_PAYMENTS=true. Default OFF means a stray sk_live_ key can
+  // never silently start charging. One-line rollback: unset ENABLE_LIVE_PAYMENTS.
+  if (keyIsLive && !env.liveEnabled) {
+    throw new Error(
+      'Stripe live key detected but ENABLE_LIVE_PAYMENTS is not "true". Refusing ' +
+        'to start: moving real money must be a deliberate opt-in, not a default. ' +
+        'Set ENABLE_LIVE_PAYMENTS=true to enable, or use an sk_test_ key.',
+    );
+  }
+  const expectLive = env.stripeMode === 'live';
+  if (expectLive !== keyIsLive) {
+    throw new Error(
+      `Stripe key livemode (${keyIsLive ? 'live' : 'test'}) does not match ` +
+        `STRIPE_MODE=${env.stripeMode}. Refusing to start to avoid moving money ` +
+        `in the wrong Stripe universe.`,
+    );
+  }
 }
 
 /** Nest DI token for the resolved Env. */

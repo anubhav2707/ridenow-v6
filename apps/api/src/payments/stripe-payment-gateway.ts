@@ -52,18 +52,22 @@ export class StripePaymentGateway implements PaymentGateway {
   }
 
   async authorize(input: AuthorizeInput): Promise<AuthorizeResult> {
-    const body = await this.post(
-      '/payment_intents',
-      {
-        amount: String(input.amountCents),
-        currency: input.currency,
-        capture_method: 'manual',
-        confirm: 'true',
-        'payment_method_types[]': 'card',
-        'metadata[rideId]': input.rideId,
-      },
-      input.idempotencyKey,
-    );
+    const form: Record<string, string> = {
+      amount: String(input.amountCents),
+      currency: input.currency,
+      capture_method: 'manual',
+      confirm: 'true',
+      'payment_method_types[]': 'card',
+      'metadata[rideId]': input.rideId,
+    };
+    // When the rider has a saved (tokenized) card, authorize off-session against
+    // it so no card details are re-entered at confirmation (SCRUM-240 AC).
+    if (input.paymentMethodId) {
+      form.payment_method = input.paymentMethodId;
+      form.off_session = 'true';
+      if (input.customerId) form.customer = input.customerId;
+    }
+    const body = await this.post('/payment_intents', form, input.idempotencyKey);
     const intentId = body.id as string;
     return { intentId, gateway: 'stripe', status: 'authorized' };
   }

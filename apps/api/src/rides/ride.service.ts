@@ -7,6 +7,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  AUTH_REPOSITORY,
+  type AuthRepository,
+} from '../auth/auth.repository';
 import { CLOCK, type Clock } from '../clock/clock';
 import { ENV, type Env } from '../config/env';
 import {
@@ -128,6 +132,7 @@ export class RideService {
     @Inject(ENV) private readonly env: Env,
     private readonly ledger: LedgerService,
     private readonly earnings: EarningsService,
+    @Inject(AUTH_REPOSITORY) private readonly authRepo: AuthRepository,
   ) {}
 
   /**
@@ -165,13 +170,30 @@ export class RideService {
     // SERVER-AUTHORITATIVE: the charge is the persisted quote total, full stop.
     const amountCents = quote.totalCents;
     const rideId = randomUUID();
-    const idempotencyKey = `auth:${rideId}`;
+    // Key the authorization idempotency on the QUOTE, not the random rideId. On
+    // a concurrent double-confirm of the same quote (rider double-tap), both
+    // requests can pass the status check and reach authorize; a per-ride key
+    // would mint TWO independent card holds, and the persistAuthorization loser
+    // would leak its hold un-voided. Sharing one quote-scoped key makes the
+    // gateway dedupe to a SINGLE hold (the amount is server-authoritative, so
+    // both calls carry identical amount/currency). The loser still 409s when
+    // persistAuthorization finds the quote already claimed, but no orphaned
+    // second hold is ever created.
+    const idempotencyKey = `auth:${quote.id}`;
+
+    // Authorize against the rider's saved card when they have one, so a repeat
+    // ride needs no card re-entry (SCRUM-240 AC). The amount is still the locked
+    // quote total — the saved card changes WHO is charged, never HOW MUCH.
+    const savedCard =
+      await this.authRepo.getDefaultPaymentMethodForPhone(quote.riderPhone);
 
     const authorization = await this.gateway.authorize({
       rideId,
       amountCents,
       currency: quote.currency,
       idempotencyKey,
+      paymentMethodId: savedCard?.stripePaymentMethodId,
+      customerId: savedCard?.stripeCustomerId ?? undefined,
     });
 
     const ride: RideRow = {

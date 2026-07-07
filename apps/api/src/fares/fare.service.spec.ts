@@ -4,9 +4,10 @@ import { FareService } from './fare.service';
 
 const env: Env = {
   activeRegion: 'geo-1',
+  appEnv: 'test',
   paymentsDriver: 'fake',
   store: 'memory',
-  quoteTtlSeconds: 120,
+  quoteTtlSeconds: 600,
   currency: 'usd',
   fare: {
     baseCents: 250,
@@ -15,6 +16,17 @@ const env: Env = {
     bookingFeeCents: 150,
   },
   uberReferenceCommissionBps: 2500,
+  stripeMode: 'test',
+  auth: {
+    jwtSecret: 'test-jwt-secret',
+    accessTtlSeconds: 900,
+    refreshTtlSeconds: 2592000,
+    otpTtlSeconds: 300,
+    otpMaxAttempts: 5,
+    otpSendWindowSeconds: 3600,
+    otpSendMax: 5,
+  },
+  twilio: {},
 };
 
 describe('FareService', () => {

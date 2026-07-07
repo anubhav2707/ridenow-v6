@@ -67,6 +67,87 @@ export const rides = pgTable(
   (t) => [index('rides_status_idx').on(t.status)],
 );
 
+// SCRUM-240 passwordless rider identity. A rider is just a phone number that
+// proved control of an SMS-delivered OTP — there is NO password column anywhere.
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  phone: text('phone').notNull().unique(),
+  role: text('role').notNull().default('rider'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// One-time SMS login codes. The raw 6-digit code is NEVER stored — only its
+// SHA-256 hash — so a DB leak can't be replayed into a login. Codes are
+// short-TTL, attempt-limited (lockout after too many wrong guesses), and
+// single-use (consumedAt is set the instant a correct code is accepted).
+export const otpCodes = pgTable(
+  'otp_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    phone: text('phone').notNull(),
+    codeHash: text('code_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index('otp_codes_phone_created_idx').on(t.phone, t.createdAt)],
+);
+
+// Refresh-token sessions. Only the SHA-256 hash of the rotating refresh token is
+// stored; presenting the token proves possession without the server ever holding
+// a replayable secret. Rotation revokes the old row and issues a new one in one
+// transaction, so a refresh token is strictly single-use.
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    refreshTokenHash: text('refresh_token_hash').notNull().unique(),
+    role: text('role').notNull().default('rider'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+// Tokenized cards saved by a rider. Card data is tokenized client-side via Stripe
+// Elements (SAQ-A); only the opaque Stripe payment_method / customer ids and
+// display-safe brand/last4 ever reach this table. Exactly one row per user is the
+// default, used to authorize the next ride with no re-entry of card details.
+export const paymentMethods = pgTable(
+  'payment_methods',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    stripeCustomerId: text('stripe_customer_id'),
+    stripePaymentMethodId: text('stripe_payment_method_id').notNull(),
+    brand: text('brand'),
+    last4: text('last4'),
+    isDefault: boolean('is_default').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('payment_methods_user_idx').on(t.userId),
+    // One saved token maps to one row; a re-save of the same token conflicts
+    // instead of stacking duplicate cards for the rider.
+    unique('payment_methods_user_pm_unique').on(t.userId, t.stripePaymentMethodId),
+  ],
+);
+
 export const quotes = pgTable('quotes', {
   id: uuid('id').primaryKey().defaultRandom(),
   riderPhone: text('rider_phone').notNull(),

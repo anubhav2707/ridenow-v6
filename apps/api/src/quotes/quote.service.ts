@@ -40,6 +40,17 @@ export interface QuoteView {
   durationSeconds: number;
   expiresAt: string;
   createdAt: string;
+  /**
+   * Explicit no-surge indication. This MVP has NO surge/dynamic pricing (out of
+   * scope), so every quote is a plain, locked fare. Making it explicit in the
+   * payload lets the rider UI promise "no surge" truthfully.
+   */
+  surge: {
+    applied: false;
+    multiplier: 1;
+  };
+  /** True: this itemized total is locked and will not change after Confirm. */
+  locked: true;
   pickup: LocationInput;
   dropoff: LocationInput;
   components: Array<{
@@ -158,6 +169,8 @@ export function toQuoteView(
     durationSeconds: quote.durationSeconds,
     expiresAt: quote.expiresAt.toISOString(),
     createdAt: quote.createdAt.toISOString(),
+    surge: { applied: false, multiplier: 1 },
+    locked: true,
     pickup: {
       label: quote.pickupLabel,
       lat: quote.pickupLat,

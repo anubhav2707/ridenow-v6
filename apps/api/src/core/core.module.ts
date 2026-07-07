@@ -1,4 +1,10 @@
 import { Global, Module } from '@nestjs/common';
+import {
+  AUTH_REPOSITORY,
+  type AuthRepository,
+} from '../auth/auth.repository';
+import { DrizzleAuthRepository } from '../auth/drizzle.auth.repository';
+import { InMemoryAuthRepository } from '../auth/in-memory.auth.repository';
 import { CLOCK, SystemClock } from '../clock/clock';
 import { ENV, loadEnv, type Env } from '../config/env';
 import { EarningsService } from '../earnings/earnings.service';
@@ -45,6 +51,14 @@ import { HaversineRouting, ROUTING } from '../routing/routing';
           : new InMemoryRideRepository(),
       inject: [ENV],
     },
+    {
+      provide: AUTH_REPOSITORY,
+      useFactory: (env: Env): AuthRepository =>
+        env.store === 'postgres'
+          ? new DrizzleAuthRepository()
+          : new InMemoryAuthRepository(),
+      inject: [ENV],
+    },
     FareService,
     LedgerService,
     EarningsService,
@@ -55,6 +69,7 @@ import { HaversineRouting, ROUTING } from '../routing/routing';
     ROUTING,
     PAYMENT_GATEWAY,
     RIDE_REPOSITORY,
+    AUTH_REPOSITORY,
     FareService,
     LedgerService,
     EarningsService,
