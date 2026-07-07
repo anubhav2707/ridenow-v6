@@ -131,11 +131,12 @@ export class DrizzleAuthRepository implements AuthRepository {
       const [row] = await tx
         .insert(paymentMethods)
         .values(pm)
-        .onConflictDoNothing({
+        .onConflictDoUpdate({
           target: [
             paymentMethods.userId,
             paymentMethods.stripePaymentMethodId,
           ],
+          set: { isDefault: pm.isDefault },
         })
         .returning();
       if (row) return mapPaymentMethod(row);
