@@ -8,6 +8,11 @@ ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "pickup_label" text;--> statement-b
 ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "pickup_lat" double precision;--> statement-breakpoint
 ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "pickup_lng" double precision;--> statement-breakpoint
 ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "offer_expires_at" timestamp with time zone;--> statement-breakpoint
+-- rides: driver assignment + accept/complete/cancel lifecycle timestamps written by the SCRUM-241 accept/complete/cancel transitions
+ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "driver_id" uuid;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "accepted_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "completed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "cancelled_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "otp_code" text;--> statement-breakpoint
 ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "otp_expires_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "rides" ADD COLUMN IF NOT EXISTS "otp_attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
