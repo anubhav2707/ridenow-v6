@@ -34,7 +34,7 @@ describe('QuoteService', () => {
       ),
     };
     const clock = { now: jest.fn().mockReturnValue(new Date('2026-07-07T12:00:00.000Z')) };
-    const env = { activeRegion: overrides.activeRegion ?? 'metropolis', quoteTtlMs: 120_000 };
+    const env = { activeRegion: overrides.activeRegion ?? 'metropolis', quoteTtlSeconds: 120 };
     const repo = { insertQuote: jest.fn().mockResolvedValue(undefined) };
 
     const service = new QuoteService(
@@ -94,11 +94,13 @@ describe('QuoteService', () => {
       expect(view.totalCents).toBe(1000);
       expect(view.components.map((c: any) => c.amountCents)).toEqual([300, 700]);
 
-      // expiresAt is a real ISO instant at clock.now() + the configured TTL. This
-      // assertion fails immediately if createQuote reads the wrong env TTL field
-      // (e.g. quoteTtlSeconds instead of quoteTtlMs) or the wrong unit, which no
-      // other test reaches.
-      const expected = new Date(clock.now().getTime() + env.quoteTtlMs).toISOString();
+      // expiresAt is a real ISO instant at clock.now() + the configured TTL
+      // (Env.quoteTtlSeconds — the canonical field env.ts/harness.ts define).
+      // This assertion fails immediately if createQuote reads a wrong env TTL
+      // field or the wrong unit, which no other test reaches.
+      const expected = new Date(
+        clock.now().getTime() + env.quoteTtlSeconds * 1000,
+      ).toISOString();
       expect(view.expiresAt).toBe(expected);
       expect(Number.isNaN(Date.parse(view.expiresAt))).toBe(false);
 

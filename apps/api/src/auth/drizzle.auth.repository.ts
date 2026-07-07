@@ -81,6 +81,17 @@ export class DrizzleAuthRepository implements AuthRepository {
     return rows.length;
   }
 
+  async countRecentFailedOtpAttempts(
+    phone: string,
+    since: Date,
+  ): Promise<number> {
+    const rows = await this.db
+      .select({ attempts: otpCodes.attempts })
+      .from(otpCodes)
+      .where(and(eq(otpCodes.phone, phone), gte(otpCodes.createdAt, since)));
+    return rows.reduce((total, row) => total + row.attempts, 0);
+  }
+
   async insertSession(session: SessionRow): Promise<void> {
     await this.db.insert(sessions).values(session);
   }
