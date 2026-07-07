@@ -51,7 +51,18 @@ async function call<T>(
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  let data: any;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    // Non-JSON body (gateway/proxy HTML, plain-text 5xx, etc.). Don't let the
+    // SyntaxError mask the real outcome — surface the HTTP status instead.
+    throw new Error(
+      res.ok
+        ? `unexpected non-JSON response (${res.status})`
+        : `request failed (${res.status}${res.statusText ? ` ${res.statusText}` : ''})`,
+    );
+  }
   if (!res.ok) {
     const message =
       (data && (data.message as string | string[])) || `request failed (${res.status})`;
