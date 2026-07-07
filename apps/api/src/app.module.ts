@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { CoreModule } from './core/core.module';
+import { DispatchModule } from './dispatch/dispatch.module';
 import { DriverModule } from './drivers/driver.module';
 import { GpsModule } from './gps/gps.module';
 import { HealthModule } from './health/health.module';
@@ -18,6 +19,7 @@ import { RideModule } from './rides/ride.module';
     DriverModule,
     GpsModule,
     PaymentsModule,
+    DispatchModule,
   ],
 })
 export class AppModule {}

@@ -29,6 +29,13 @@
       "when": 1710000003000,
       "tag": "0003_scrum240_auth_payment_methods",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1710000004000,
+      "tag": "0004_scrum242_dispatch",
+      "breakpoints": true
     }
   ]
 }

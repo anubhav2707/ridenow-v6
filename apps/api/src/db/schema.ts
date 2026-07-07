@@ -198,11 +198,24 @@ export const drivers = pgTable(
     plan: text('plan'),
     subscriptionFeeCents: integer('subscription_fee_cents').notNull().default(0),
     active: boolean('active').notNull().default(false),
+    // SCRUM-242 dispatch-lite proximity. A driver's last self-reported position,
+    // used only to RANK nearby available drivers for one-click operator assign.
+    // Plain lat/lng doubles (haversine-ranked) keep CI/tests hermetic; production
+    // may later promote these to a PostGIS geometry(Point,4326) + GiST/KNN index
+    // (the image is postgis-enabled) without changing this feature's contract.
+    lastLat: doublePrecision('last_lat'),
+    lastLng: doublePrecision('last_lng'),
+    lastLocationAt: timestamp('last_location_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [index('drivers_active_idx').on(t.active)],
+  (t) => [
+    index('drivers_active_idx').on(t.active),
+    // Ranking source: available drivers are looked up by (region, active); the
+    // proximity sort runs in the service over the last-known coordinates.
+    index('drivers_region_active_idx').on(t.region, t.active),
+  ],
 );
 
 // GPS pings for an in-progress trip. Deliberately off the money path: a ping is

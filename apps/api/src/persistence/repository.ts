@@ -49,6 +49,11 @@ export interface DriverRow {
   plan: string | null;
   subscriptionFeeCents: Cents;
   active: boolean;
+  // SCRUM-242 dispatch-lite: last self-reported position, used only to rank
+  // nearby available drivers. Null until the driver first reports a location.
+  lastLat: number | null;
+  lastLng: number | null;
+  lastLocationAt: Date | null;
   createdAt: Date;
 }
 
@@ -133,6 +138,20 @@ export interface RideRepository {
   upsertDriver(driver: DriverRow): Promise<DriverRow>;
   getDriver(id: string): Promise<DriverRow | null>;
   getDriverByPhone(phone: string): Promise<DriverRow | null>;
+  /** Update a driver's last-known position (dispatch proximity ranking). */
+  updateDriverLocation(input: {
+    driverId: string;
+    lat: number;
+    lng: number;
+    at: Date;
+  }): Promise<DriverRow>;
+  /**
+   * Active, located drivers in `region` who are NOT currently on an active ride
+   * (accepted / in_progress) — the candidate pool the operator ranks by
+   * proximity. The final not-double-assigned guarantee is enforced atomically in
+   * assignDriver; this read is only for building the ranked candidate list.
+   */
+  availableDriversForRegion(region: string): Promise<DriverRow[]>;
 
   // --- rides ---
   getRide(id: string): Promise<RideRow | null>;
@@ -151,6 +170,24 @@ export interface RideRepository {
     otpCode: string;
     otpExpiresAt: Date;
   }): Promise<RideRow | null>;
+  /**
+   * Operator/greedy dispatch assignment. Atomically (a) claims a specific driver
+   * — rejecting the assignment if that driver is already on another active ride
+   * (accepted / in_progress), so a driver is never double-assigned — and (b)
+   * claims the ride via the same offered/driverless/unexpired compare-and-set as
+   * acceptOffer, minting the pickup OTP. Returns the updated ride when this
+   * caller won BOTH claims, or null when the ride was not claimable or the driver
+   * was already busy — so two requests racing for one driver cannot both win.
+   */
+  assignDriver(input: {
+    rideId: string;
+    driverId: string;
+    now: Date;
+    otpCode: string;
+    otpExpiresAt: Date;
+  }): Promise<RideRow | null>;
+  /** Offered, driverless, unexpired ride requests in `region` — the operator queue. */
+  openRideRequests(region: string): Promise<RideRow[]>;
 
   // --- gps pings (in-progress trip; off the money path) ---
   /** Append a ping (server assigns the per-ride seq) and refresh the ride's hot last-position. */
@@ -198,6 +235,8 @@ export interface RideRepository {
     driverId: string,
     region: string,
   ): Promise<RideRow[]>;
+  /** Every completed (paid) ride in `region` — the cohort for repeat-liquidity. */
+  completedRidesInRegion(region: string): Promise<RideRow[]>;
 }
 
 /** Nest DI token for the active RideRepository. */

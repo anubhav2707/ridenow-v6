@@ -4,6 +4,8 @@ import { SmsService } from '../auth/sms.service';
 import { TokenService } from '../auth/token.service';
 import { FakeClock } from '../clock/clock';
 import type { Env } from '../config/env';
+import { DispatchService } from '../dispatch/dispatch.service';
+import { RepeatLiquidityService } from '../dispatch/repeat-liquidity.service';
 import { DriverService } from '../drivers/driver.service';
 import { EarningsService } from '../earnings/earnings.service';
 import { FareService } from '../fares/fare.service';
@@ -76,6 +78,8 @@ export function makeHarness(opts: { gateway?: FakePaymentGateway } = {}) {
     authRepo,
   );
   const drivers = new DriverService(repo, clock, env);
+  const dispatch = new DispatchService(repo, clock, env);
+  const repeatLiquidity = new RepeatLiquidityService(repo, clock, env);
   const gps = new GpsService(repo, clock);
   const tokens = new TokenService(env, clock);
   const sms = new SmsService(env);
@@ -94,6 +98,8 @@ export function makeHarness(opts: { gateway?: FakePaymentGateway } = {}) {
     quotes,
     rides,
     drivers,
+    dispatch,
+    repeatLiquidity,
     gps,
     tokens,
     sms,
@@ -111,6 +117,32 @@ export async function registerDemoDriver(h: Harness, phone = '+15550109999') {
     displayName: 'Demo Driver',
     region: 'geo-1',
   });
+}
+
+/**
+ * Registers a demo driver and reports a location, making them an available
+ * dispatch candidate. `lat`/`lng` default to the pickup so the driver is nearby.
+ */
+export async function registerLocatedDriver(
+  h: Harness,
+  opts: {
+    phone: string;
+    lat?: number;
+    lng?: number;
+    displayName?: string;
+  },
+): Promise<{ id: string }> {
+  const driver = await h.drivers.register({
+    phone: opts.phone,
+    displayName: opts.displayName ?? `Driver ${opts.phone}`,
+    region: 'geo-1',
+  });
+  await h.dispatch.updateDriverLocation(
+    driver.id,
+    opts.lat ?? DEMO_ROUTE.pickup.lat,
+    opts.lng ?? DEMO_ROUTE.pickup.lng,
+  );
+  return { id: driver.id };
 }
 
 /** Onboards a demo driver via the SCRUM-241 lightweight onboarding flow. */

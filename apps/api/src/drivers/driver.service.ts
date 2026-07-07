@@ -79,6 +79,9 @@ export class DriverService {
       plan: null,
       subscriptionFeeCents: 0,
       active: true,
+      lastLat: null,
+      lastLng: null,
+      lastLocationAt: null,
       createdAt: this.clock.now(),
     };
     const saved = await this.repo.upsertDriver(driver);
@@ -129,6 +132,9 @@ export class DriverService {
       subscriptionFeeCents: plan.subscriptionFeeCents,
       // Activated immediately — no KYC gate.
       active: true,
+      lastLat: null,
+      lastLng: null,
+      lastLocationAt: null,
       createdAt: this.clock.now(),
     };
     const saved = await this.repo.upsertDriver(driver);

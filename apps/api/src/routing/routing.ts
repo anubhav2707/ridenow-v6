@@ -23,7 +23,8 @@ function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
 
-function haversineMeters(a: LatLng, b: LatLng): number {
+/** Great-circle distance in metres. Reused by dispatch to rank nearby drivers. */
+export function haversineMeters(a: LatLng, b: LatLng): number {
   const dLat = toRadians(b.lat - a.lat);
   const dLng = toRadians(b.lng - a.lng);
   const lat1 = toRadians(a.lat);

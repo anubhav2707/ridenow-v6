@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, or } from 'drizzle-orm';
 import { db as defaultDb } from '../db/client';
 import {
   drivers,
@@ -96,6 +96,45 @@ export class DrizzleRideRepository implements RideRepository {
     return row ? mapDriver(row) : null;
   }
 
+  async updateDriverLocation(input: {
+    driverId: string;
+    lat: number;
+    lng: number;
+    at: Date;
+  }): Promise<DriverRow> {
+    const [row] = await this.db
+      .update(drivers)
+      .set({ lastLat: input.lat, lastLng: input.lng, lastLocationAt: input.at })
+      .where(eq(drivers.id, input.driverId))
+      .returning();
+    return mapDriver(row);
+  }
+
+  async availableDriversForRegion(region: string): Promise<DriverRow[]> {
+    // Candidate pool: active, located drivers in region, minus any driver already
+    // on an active ride. The final not-double-assigned guarantee is enforced
+    // atomically in assignDriver; this read only shapes the ranked candidate list.
+    const candidates = await this.db
+      .select()
+      .from(drivers)
+      .where(and(eq(drivers.region, region), eq(drivers.active, true)));
+    const busyRows = await this.db
+      .select({ driverId: rides.driverId })
+      .from(rides)
+      .where(
+        and(
+          eq(rides.region, region),
+          inArray(rides.status, ['accepted', 'in_progress']),
+        ),
+      );
+    const busy = new Set(busyRows.map((r) => r.driverId).filter(Boolean));
+    return candidates
+      .map(mapDriver)
+      .filter(
+        (d) => d.lastLat !== null && d.lastLng !== null && !busy.has(d.id),
+      );
+  }
+
   async getRide(id: string): Promise<RideRow | null> {
     const [row] = await this.db.select().from(rides).where(eq(rides.id, id));
     return row ? mapRide(row) : null;
@@ -144,6 +183,76 @@ export class DrizzleRideRepository implements RideRepository {
       )
       .returning();
     return row ? mapRide(row) : null;
+  }
+
+  async assignDriver(input: {
+    rideId: string;
+    driverId: string;
+    now: Date;
+    otpCode: string;
+    otpExpiresAt: Date;
+  }): Promise<RideRow | null> {
+    return this.db.transaction(async (tx) => {
+      // Lock the driver row so concurrent assignments of the SAME driver
+      // serialize here: the first to commit an active ride makes the rest see the
+      // driver as busy. This is the driver-side of "never double-assigned".
+      const [driver] = await tx
+        .select({ id: drivers.id })
+        .from(drivers)
+        .where(eq(drivers.id, input.driverId))
+        .for('update');
+      if (!driver) return null;
+      const active = await tx
+        .select({ id: rides.id })
+        .from(rides)
+        .where(
+          and(
+            eq(rides.driverId, input.driverId),
+            inArray(rides.status, ['accepted', 'in_progress']),
+          ),
+        );
+      if (active.length > 0) return null;
+      // Ride-side compare-and-set: only the row still offered, driverless and
+      // unexpired is claimed. Two requests racing for one driver cannot both win —
+      // the driver-row lock above already serialized them.
+      const [row] = await tx
+        .update(rides)
+        .set({
+          driverId: input.driverId,
+          status: 'accepted',
+          acceptedAt: input.now,
+          otpCode: input.otpCode,
+          otpExpiresAt: input.otpExpiresAt,
+          otpAttempts: 0,
+          otpConsumedAt: null,
+        })
+        .where(
+          and(
+            eq(rides.id, input.rideId),
+            eq(rides.status, 'offered'),
+            isNull(rides.driverId),
+            or(isNull(rides.offerExpiresAt), gt(rides.offerExpiresAt, input.now)),
+          ),
+        )
+        .returning();
+      return row ? mapRide(row) : null;
+    });
+  }
+
+  async openRideRequests(region: string): Promise<RideRow[]> {
+    const rows = await this.db
+      .select()
+      .from(rides)
+      .where(
+        and(
+          eq(rides.region, region),
+          eq(rides.status, 'offered'),
+          isNull(rides.driverId),
+        ),
+      );
+    return rows
+      .map(mapRide)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
   async recordPing(input: {
@@ -310,6 +419,14 @@ export class DrizzleRideRepository implements RideRepository {
           eq(rides.status, 'completed'),
         ),
       );
+    return rows.map(mapRide);
+  }
+
+  async completedRidesInRegion(region: string): Promise<RideRow[]> {
+    const rows = await this.db
+      .select()
+      .from(rides)
+      .where(and(eq(rides.region, region), eq(rides.status, 'completed')));
     return rows.map(mapRide);
   }
 }

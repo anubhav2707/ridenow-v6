@@ -68,6 +68,50 @@ export class InMemoryRideRepository implements RideRepository {
     return driver ? { ...driver } : null;
   }
 
+  async updateDriverLocation(input: {
+    driverId: string;
+    lat: number;
+    lng: number;
+    at: Date;
+  }): Promise<DriverRow> {
+    const driver = this.drivers.get(input.driverId);
+    if (!driver) throw new Error(`driver ${input.driverId} not found`);
+    const next: DriverRow = {
+      ...driver,
+      lastLat: input.lat,
+      lastLng: input.lng,
+      lastLocationAt: input.at,
+    };
+    this.drivers.set(input.driverId, next);
+    return { ...next };
+  }
+
+  async availableDriversForRegion(region: string): Promise<DriverRow[]> {
+    // Candidate pool: active, located drivers in region, minus any driver already
+    // on an active ride. The final not-double-assigned guarantee is enforced
+    // atomically in assignDriver; this read only shapes the ranked candidate list.
+    const busy = new Set(
+      [...this.rides.values()]
+        .filter(
+          (r) =>
+            r.region === region &&
+            (r.status === 'accepted' || r.status === 'in_progress') &&
+            r.driverId !== null,
+        )
+        .map((r) => r.driverId),
+    );
+    return [...this.drivers.values()]
+      .filter(
+        (d) =>
+          d.region === region &&
+          d.active &&
+          d.lastLat !== null &&
+          d.lastLng !== null &&
+          !busy.has(d.id),
+      )
+      .map((d) => ({ ...d }));
+  }
+
   async getRide(id: string): Promise<RideRow | null> {
     const ride = this.rides.get(id);
     return ride ? { ...ride } : null;
@@ -112,6 +156,60 @@ export class InMemoryRideRepository implements RideRepository {
     };
     this.rides.set(input.rideId, next);
     return { ...next };
+  }
+
+  async assignDriver(input: {
+    rideId: string;
+    driverId: string;
+    now: Date;
+    otpCode: string;
+    otpExpiresAt: Date;
+  }): Promise<RideRow | null> {
+    // Driver-side claim: reject if the driver is already on an active ride, then
+    // run the same offered/driverless/unexpired compare-and-set as acceptOffer, so
+    // a driver is never double-assigned and two requests racing for one can't both win.
+    const driver = this.drivers.get(input.driverId);
+    if (!driver) return null;
+    const busy = [...this.rides.values()].some(
+      (r) =>
+        r.driverId === input.driverId &&
+        (r.status === 'accepted' || r.status === 'in_progress'),
+    );
+    if (busy) return null;
+    const ride = this.rides.get(input.rideId);
+    if (
+      !ride ||
+      ride.status !== 'offered' ||
+      ride.driverId !== null ||
+      (ride.offerExpiresAt !== null &&
+        ride.offerExpiresAt.getTime() <= input.now.getTime())
+    ) {
+      return null;
+    }
+    const next: RideRow = {
+      ...ride,
+      driverId: input.driverId,
+      status: 'accepted',
+      acceptedAt: input.now,
+      otpCode: input.otpCode,
+      otpExpiresAt: input.otpExpiresAt,
+      otpAttempts: 0,
+      otpConsumedAt: null,
+    };
+    this.rides.set(input.rideId, next);
+    return { ...next };
+  }
+
+  async openRideRequests(region: string): Promise<RideRow[]> {
+    return [...this.rides.values()]
+      .filter(
+        (r) =>
+          r.region === region &&
+          r.status === 'offered' &&
+          r.driverId === null,
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((r) => ({ ...r }));
   }
 
   async recordPing(input: {
@@ -252,6 +350,12 @@ export class InMemoryRideRepository implements RideRepository {
           r.region === region &&
           r.status === 'completed',
       )
+      .map((r) => ({ ...r }));
+  }
+
+  async completedRidesInRegion(region: string): Promise<RideRow[]> {
+    return [...this.rides.values()]
+      .filter((r) => r.region === region && r.status === 'completed')
       .map((r) => ({ ...r }));
   }
 
