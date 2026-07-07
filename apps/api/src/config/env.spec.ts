@@ -97,6 +97,40 @@ describe('loadEnv', () => {
     ).not.toThrow();
   });
 
+  it('defaults live payments OFF and flips on only for ENABLE_LIVE_PAYMENTS=true', () => {
+    // Default OFF: a stray live key can never silently start charging.
+    expect(loadEnv({}).liveEnabled).toBe(false);
+    expect(loadEnv({ ENABLE_LIVE_PAYMENTS: 'false' }).liveEnabled).toBe(false);
+    expect(loadEnv({ ENABLE_LIVE_PAYMENTS: '' }).liveEnabled).toBe(false);
+    // Only the exact string 'true' is an explicit, deliberate opt-in.
+    expect(loadEnv({ ENABLE_LIVE_PAYMENTS: 'true' }).liveEnabled).toBe(true);
+    expect(loadEnv({ ENABLE_LIVE_PAYMENTS: 'TRUE' }).liveEnabled).toBe(false);
+  });
+
+  it('refuses to boot with a live Stripe key unless ENABLE_LIVE_PAYMENTS=true', () => {
+    // Live key + live mode but the opt-in flag is OFF: real money must be opt-in.
+    expect(() =>
+      assertStripeMode(
+        loadEnv({
+          PAYMENTS_DRIVER: 'stripe',
+          STRIPE_SECRET_KEY: 'sk_live_realvalue123',
+          STRIPE_MODE: 'live',
+        }),
+      ),
+    ).toThrow(/ENABLE_LIVE_PAYMENTS/);
+    // Same config with the deliberate opt-in flipped ON: allowed to boot.
+    expect(() =>
+      assertStripeMode(
+        loadEnv({
+          PAYMENTS_DRIVER: 'stripe',
+          STRIPE_SECRET_KEY: 'sk_live_realvalue123',
+          STRIPE_MODE: 'live',
+          ENABLE_LIVE_PAYMENTS: 'true',
+        }),
+      ),
+    ).not.toThrow();
+  });
+
   it('rejects placeholder Stripe keys when the stripe driver is selected', () => {
     expect(() =>
       loadEnv({ PAYMENTS_DRIVER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_xxx' }),
