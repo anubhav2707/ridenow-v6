@@ -41,6 +41,10 @@ export class DriverController {
 
   // Per-trip earnings ledger: full take-home with a $0 per-trip deduction and
   // no commission line.
+  // TODO(auth): `:id` is intentionally unused for the no-auth MVP — resolution
+  // is by rideId alone, so this is NOT an ownership check. Once auth lands,
+  // verify the ride's driver_id matches `:id` and 404 otherwise (consistent
+  // with the 'unknown driver id -> 404' acceptance criterion).
   @Get(':id/rides/:rideId/earnings')
   tripEarnings(
     @Param('rideId') rideId: string,
@@ -51,6 +55,10 @@ export class DriverController {
   // SCRUM-241 driver take-home ledger screen: locked upfront fare, the flat
   // subscription-fee line item as the ONLY deduction ($0 per trip), and a
   // "You Keep" total equal to 100% of the fare — no percentage commission line.
+  // TODO(auth): `:id` is intentionally unused for the no-auth MVP — resolution
+  // is by rideId alone, so this is NOT an ownership check. Once auth lands,
+  // verify the ride's driver_id matches `:id` and 404 otherwise (consistent
+  // with the 'unknown driver id -> 404' acceptance criterion).
   @Get(':id/rides/:rideId/ledger')
   tripLedger(
     @Param('rideId') rideId: string,
