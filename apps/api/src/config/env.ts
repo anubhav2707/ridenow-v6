@@ -55,6 +55,12 @@ export interface Env {
   uberReferenceCommissionBps: number;
   /** Server-side-only test/live gate for real money movement. */
   stripeMode: StripeMode;
+  /**
+   * Explicit, reversible opt-in for real-money (sk_live_) charges — default OFF.
+   * assertStripeMode refuses to boot with a live key unless this is true, so live
+   * mode is a deliberate human decision, not a default. Rollback: unset it.
+   */
+  liveEnabled?: boolean;
   /** Only present/required when paymentsDriver === 'stripe'. */
   stripeSecretKey?: string;
   auth: AuthConfig;
@@ -129,6 +135,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ['test', 'live'],
     'test',
   );
+  // Real-money (sk_live_) charges are opt-in and OFF by default: assertStripeMode
+  // refuses to boot with a live key unless this is explicitly 'true'. Anything
+  // else — unset, 'false', empty — keeps us in safe test/fake territory.
+  const liveEnabled = source.ENABLE_LIVE_PAYMENTS?.trim() === 'true';
   const stripeSecretKey = source.STRIPE_SECRET_KEY?.trim();
   if (paymentsDriver === 'stripe') {
     if (!stripeSecretKey || PLACEHOLDER_SECRETS.has(stripeSecretKey)) {
@@ -170,6 +180,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       2500,
     ),
     stripeMode,
+    liveEnabled,
     stripeSecretKey,
     auth: {
       jwtSecret,
@@ -223,6 +234,16 @@ export function assertStripeMode(env: Env): void {
   if (!keyIsLive && !keyIsTest) {
     throw new Error(
       `STRIPE_SECRET_KEY has an unrecognized prefix — expected sk_test_ or sk_live_.`,
+    );
+  }
+  // Real-money movement is an explicit, reversible opt-in: a live key only boots
+  // when ENABLE_LIVE_PAYMENTS=true. Default OFF means a stray sk_live_ key can
+  // never silently start charging. One-line rollback: unset ENABLE_LIVE_PAYMENTS.
+  if (keyIsLive && !env.liveEnabled) {
+    throw new Error(
+      'Stripe live key detected but ENABLE_LIVE_PAYMENTS is not "true". Refusing ' +
+        'to start: moving real money must be a deliberate opt-in, not a default. ' +
+        'Set ENABLE_LIVE_PAYMENTS=true to enable, or use an sk_test_ key.',
     );
   }
   const expectLive = env.stripeMode === 'live';
