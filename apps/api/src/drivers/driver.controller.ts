@@ -39,8 +39,9 @@ export class DriverController {
     return this.drivers.getView(id);
   }
 
-  // Per-trip earnings ledger: full take-home with a $0 per-trip deduction and
-  // no commission line.
+  // Per-trip earnings: full take-home under the flat-fee plan. Any per-trip
+  // deduction is the flat subscription fee ($0 per trip), never a commission —
+  // no commission line appears, consistent with tripLedger's flat-fee display.
   // TODO(auth): `:id` is intentionally unused for the no-auth MVP — resolution
   // is by rideId alone, so this is NOT an ownership check. Once auth lands,
   // verify the ride's driver_id matches `:id` and 404 otherwise (consistent
