@@ -1,0 +1,72 @@
+{
+  "SCRUM-239": {
+    "ticket": "SCRUM-239",
+    "agent": "devagent-aman-2",
+    "updated": 1783353288.1016152,
+    "branch": "chore/scaffold-SCRUM-239",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase4_review",
+    "pr_number": 1
+  },
+  "SCRUM-242": {
+    "ticket": "SCRUM-242",
+    "agent": "devagent-aman-1",
+    "updated": 1783458168.344278,
+    "branch": "feature/SCRUM-242",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase4_review",
+    "pr_number": 5
+  },
+  "SCRUM-243": {
+    "ticket": "SCRUM-243",
+    "agent": "devagent-aman-2",
+    "updated": 1783366307.1032221,
+    "branch": "feature/SCRUM-243",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase4_review",
+    "pr_number": 2
+  },
+  "SCRUM-241": {
+    "ticket": "SCRUM-241",
+    "agent": "devagent-aman-2",
+    "updated": 1783390869.389171,
+    "branch": "feature/SCRUM-241",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase4_review",
+    "pr_number": 3
+  },
+  "SCRUM-240": {
+    "ticket": "SCRUM-240",
+    "agent": "devagent-aman-1",
+    "updated": 1783435101.59485,
+    "branch": "feature/SCRUM-240",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase4_review",
+    "pr_number": 4
+  },
+  "SCRUM-245": {
+    "ticket": "SCRUM-245",
+    "agent": "devagent-aman-2",
+    "updated": 1783604210.6893592,
+    "branch": "feature/SCRUM-245",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase1_ingestion",
+    "pr_number": null
+  },
+  "SCRUM-247": {
+    "ticket": "SCRUM-247",
+    "agent": "devagent-aman-1",
+    "updated": 1783604242.377565,
+    "branch": "feature/SCRUM-247",
+    "base_branch": "main",
+    "repo": "anubhav2707/ridenow-v6",
+    "phase": "phase1_ingestion",
+    "pr_number": null
+  }
+}
